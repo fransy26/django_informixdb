@@ -165,7 +165,8 @@ COPY --chown=${nonroot_uid} \
      --from=ibmcom/informix-developer-sandbox@sha256:678250715879a7cbdd2ea658ff7ecd7087dcaf0b8e39d47c936916edff62c5ec \
         /home/informix/odbc/ /opt/IBM/informix/
 
-RUN printf '[ODBC]\nUNICODE=UCS-2\n' >> /opt/IBM/informix/etc/odbc.ini
+RUN echo "${PYTHON_VERSION}" > /tmp/py311-latest
+RUN cat odbc.ini >> ${PYTHON_VERSION}/odbc.ini
 
 ##------------------------------------------------------------------------------
 FROM csdk AS multipy
