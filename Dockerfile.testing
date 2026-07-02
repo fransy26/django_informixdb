@@ -165,9 +165,6 @@ COPY --chown=${nonroot_uid} \
      --from=ibmcom/informix-developer-sandbox@sha256:678250715879a7cbdd2ea658ff7ecd7087dcaf0b8e39d47c936916edff62c5ec \
         /home/informix/odbc/ /opt/IBM/informix/
 
-RUN echo "${PYTHON_VERSION}" > /tmp/py311-latest
-RUN cat odbc.ini >> ${HOME}/odbc.ini
-
 ##------------------------------------------------------------------------------
 FROM csdk AS multipy
 ARG nonroot_uid
@@ -190,6 +187,8 @@ RUN chmod a+rx /usr/local/bin/wait-for-deps.sh
 ADD --chown=${nonroot_uid} README.rst setup.* tox.ini /src/
 ADD --chown=${nonroot_uid} django_informixdb/ /src/django_informixdb/
 ADD --chown=${nonroot_uid} test/ /src/test/
+ADD --chown=${nonroot_uid} odbc.ini /src/.odbc.ini
+
 RUN chown ${nonroot_uid} /src
 
 ENV PATH=/opt/py311/bin:/opt/py310/bin:/opt/py39/bin:"${PATH}"
