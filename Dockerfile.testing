@@ -166,7 +166,7 @@ COPY --chown=${nonroot_uid} \
         /home/informix/odbc/ /opt/IBM/informix/
 
 RUN echo "${PYTHON_VERSION}" > /tmp/py311-latest
-RUN cat odbc.ini >> ${PYTHON_VERSION}/odbc.ini
+RUN cat odbc.ini >> ${HOME}/odbc.ini
 
 ##------------------------------------------------------------------------------
 FROM csdk AS multipy
