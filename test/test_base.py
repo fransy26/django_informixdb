@@ -1,4 +1,4 @@
-from unittest.mock import Mock, call
+from unittest.mock import Mock, call, patch
 from datetime import timedelta
 
 import pyodbc
@@ -6,6 +6,7 @@ import pytest
 from freezegun import freeze_time
 
 from django_informixdb.base import DatabaseWrapper
+import django_informixdb.base as base_module
 
 
 CONNECTION_FAILED_ERROR = pyodbc.Error(
@@ -279,3 +280,56 @@ def test_sleeps_between_connection_attempts(mocker, mock_sleep, mock_connect, db
         call(15, 100),
     ]
     assert mock_sleep.call_args_list == [call(1), call(2), call(3), call(4), call(5)]
+
+
+# Django 6 fix: BIGINT (-114) output converter
+
+
+def _get_bigint_converter(mock_connection):
+    """Extract the converter registered for SQL type -114 from add_output_converter calls."""
+    for args, _ in mock_connection.add_output_converter.call_args_list:
+        if args[0] == -114:
+            return args[1]
+    return None
+
+
+def test_bigint_output_converter_registered_on_django_gte_6(mock_connect, db_config):
+    with patch.object(base_module, 'IS_DJANGO_GTE_6', True):
+        db = DatabaseWrapper(db_config)
+        db.get_new_connection(db.get_connection_params())
+    converter = _get_bigint_converter(mock_connect.return_value)
+    assert converter is not None, "Expected -114 output converter to be registered on Django >= 6"
+
+
+def test_bigint_output_converter_not_registered_on_django_lt_6(mock_connect, db_config):
+    with patch.object(base_module, 'IS_DJANGO_GTE_6', False):
+        db = DatabaseWrapper(db_config)
+        db.get_new_connection(db.get_connection_params())
+    converter = _get_bigint_converter(mock_connect.return_value)
+    assert converter is None, "Expected -114 output converter NOT to be registered on Django < 6"
+
+
+@pytest.mark.parametrize("value, expected", [
+    (b'\x01\x00\x00\x00\x00\x00\x00\x00', 1),
+    (b'\xff\xff\xff\xff\xff\xff\xff\xff', -1),
+    (b'\x00\x00\x00\x00\x00\x00\x00\x80', -9223372036854775808),  # min int64
+    (b'\xff\xff\xff\xff\xff\xff\xff\x7f', 9223372036854775807),   # max int64
+    (bytearray(b'\x02\x00\x00\x00\x00\x00\x00\x00'), 2),
+])
+def test_bigint_output_converter_decodes_bytes_as_little_endian_signed_int(
+    mock_connect, db_config, value, expected
+):
+    with patch.object(base_module, 'IS_DJANGO_GTE_6', True):
+        db = DatabaseWrapper(db_config)
+        db.get_new_connection(db.get_connection_params())
+    converter = _get_bigint_converter(mock_connect.return_value)
+    assert converter(value) == expected
+
+
+def test_bigint_output_converter_passes_through_non_bytes(mock_connect, db_config):
+    with patch.object(base_module, 'IS_DJANGO_GTE_6', True):
+        db = DatabaseWrapper(db_config)
+        db.get_new_connection(db.get_connection_params())
+    converter = _get_bigint_converter(mock_connect.return_value)
+    assert converter(42) == 42
+    assert converter("99") == 99
