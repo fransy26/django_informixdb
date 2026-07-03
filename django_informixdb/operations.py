@@ -70,7 +70,7 @@ class DatabaseOperations(BaseDatabaseOperations):
         internal_type = expression.output_field.get_internal_type()
         if internal_type == 'BooleanField':
             converters.append(lambda value, *_: True if value == 1 else False)
-        elif internal_type == 'NullBooleanField' and django.VERSION < (6, 0):
+        elif internal_type == 'NullBooleanField':
             converters.append(lambda value, *_: True if value == 1 else False if value == 0 else None)
         elif internal_type == 'DateTimeField':
             converters.append(self.convert_datetimefield_value)
