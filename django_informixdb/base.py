@@ -287,6 +287,13 @@ class DatabaseWrapper(BaseDatabaseWrapper):
         self.connection.add_output_converter(pyodbc.SQL_WVARCHAR, self._output_converter)
         self.connection.add_output_converter(pyodbc.SQL_LONGVARCHAR, self._output_converter)
         self.connection.add_output_converter(pyodbc.SQL_WLONGVARCHAR, self._output_converter)
+        # SQL_INFX_BIGINT (-114): Informix-specific 64-bit integer type (used for BIGINT/BIGSERIAL
+        # columns, e.g. Django's BigAutoField). pyodbc fetches unsupported types as SQL_C_BINARY,
+        # so we interpret the 8-byte little-endian payload as a signed integer.
+        self.connection.add_output_converter(
+            -114,
+            lambda r: int.from_bytes(r, byteorder='little', signed=True) if isinstance(r, (bytes, bytearray)) else int(r),
+        )
 
         if 'LOCK_MODE_WAIT' in conn_params['OPTIONS']:
             self.set_lock_mode(wait=conn_params['OPTIONS']['LOCK_MODE_WAIT'])
