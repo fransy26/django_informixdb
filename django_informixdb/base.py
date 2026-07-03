@@ -42,12 +42,6 @@ logger = logging.getLogger(__name__)
 def decoder(value, encodings=('utf-8',)):
     """This decoder tries multiple encodings before giving up"""
 
-    if IS_DJANGO_GTE_6:
-        if isinstance(value, str):
-            return value
-        if isinstance(value, memoryview):
-            value = bytes(value)
-
     if not isinstance(value, bytes):
         raise ValueError(f"Not a binary type: {value} {type(value)}")
 
@@ -274,12 +268,8 @@ class DatabaseWrapper(BaseDatabaseWrapper):
         # truncate values greater than the limit.
         self.connection.maxwrite = 32000
 
-        if IS_DJANGO_GTE_6:
-            self.connection.add_output_converter(-101, lambda r: r.decode('utf-8') if isinstance(r, (bytes, bytearray)) else r)  # Constraints
-            self.connection.add_output_converter(-391, lambda r: r.decode('utf-16-be') if isinstance(r, (bytes, bytearray)) else r)  # Integrity Error
-        else:
-            self.connection.add_output_converter(-101, lambda r: r.decode('utf-8'))  # Constraints
-            self.connection.add_output_converter(-391, lambda r: r.decode('utf-16-be'))  # Integrity Error
+        self.connection.add_output_converter(-101, lambda r: r.decode('utf-8'))  # Constraints
+        self.connection.add_output_converter(-391, lambda r: r.decode('utf-16-be'))  # Integrity Error
 
         self.connection.add_output_converter(pyodbc.SQL_CHAR, self._output_converter)
         self.connection.add_output_converter(pyodbc.SQL_WCHAR, self._output_converter)
@@ -287,13 +277,14 @@ class DatabaseWrapper(BaseDatabaseWrapper):
         self.connection.add_output_converter(pyodbc.SQL_WVARCHAR, self._output_converter)
         self.connection.add_output_converter(pyodbc.SQL_LONGVARCHAR, self._output_converter)
         self.connection.add_output_converter(pyodbc.SQL_WLONGVARCHAR, self._output_converter)
-        # SQL_INFX_BIGINT (-114): Informix-specific 64-bit integer type (used for BIGINT/BIGSERIAL
-        # columns, e.g. Django's BigAutoField). pyodbc fetches unsupported types as SQL_C_BINARY,
-        # so we interpret the 8-byte little-endian payload as a signed integer.
-        self.connection.add_output_converter(
-            -114,
-            lambda r: int.from_bytes(r, byteorder='little', signed=True) if isinstance(r, (bytes, bytearray)) else int(r),
-        )
+        if IS_DJANGO_GTE_6:
+            # SQL_INFX_BIGINT (-114): Informix-specific 64-bit integer type (used for BIGINT/BIGSERIAL
+            # columns, e.g. Django's BigAutoField). pyodbc fetches unsupported types as SQL_C_BINARY,
+            # so we interpret the 8-byte little-endian payload as a signed integer.
+            self.connection.add_output_converter(
+                -114,
+                lambda r: int.from_bytes(r, byteorder='little', signed=True) if isinstance(r, (bytes, bytearray)) else int(r),
+            )
 
         if 'LOCK_MODE_WAIT' in conn_params['OPTIONS']:
             self.set_lock_mode(wait=conn_params['OPTIONS']['LOCK_MODE_WAIT'])
@@ -344,15 +335,9 @@ class DatabaseWrapper(BaseDatabaseWrapper):
 
         @todo: See if this applies to other escape characters
         """
-        if IS_DJANGO_GTE_6:
-            if isinstance(raw, (bytes, bytearray)):
-                return raw.replace(b'\\n', b'\n')
-            return raw.replace('\\n', '\n')
         return raw.replace(b'\\n', b'\n')
 
     def _output_converter(self, raw):
-        if IS_DJANGO_GTE_6 and isinstance(raw, str):
-            return raw
         return decoder(self._unescape(raw), self.encodings)
 
     def init_connection_state(self):
