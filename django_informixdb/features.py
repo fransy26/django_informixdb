@@ -1,3 +1,5 @@
+import django
+
 from django.db.backends.base.features import BaseDatabaseFeatures
 from django.db.utils import InterfaceError
 
@@ -20,5 +22,7 @@ class DatabaseFeatures(BaseDatabaseFeatures):
     has_select_for_update = True
     supports_select_for_update_with_limit = True
     closed_cursor_error_class = InterfaceError
-    can_return_columns_from_insert = False
-    can_return_rows_from_update = False
+
+    if django.VERSION >= (6, 0):
+        can_return_columns_from_insert = False
+        can_return_rows_from_update = False

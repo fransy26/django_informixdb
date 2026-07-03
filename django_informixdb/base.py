@@ -11,6 +11,10 @@ import time
 import random
 import re
 
+import django
+
+IS_DJANGO_GTE_6 = django.VERSION >= (6, 0)
+
 from django.db import connections
 from django.db.backends.base.base import BaseDatabaseWrapper
 from django.db.backends.base.validation import BaseDatabaseValidation
@@ -38,14 +42,14 @@ logger = logging.getLogger(__name__)
 def decoder(value, encodings=('utf-8',)):
     """This decoder tries multiple encodings before giving up"""
 
-    if isinstance(value, str):
-        return value
+    if IS_DJANGO_GTE_6:
+        if isinstance(value, str):
+            return value
+        if isinstance(value, memoryview):
+            value = bytes(value)
 
-    if not isinstance(value, (bytes, bytearray, memoryview)):
+    if not isinstance(value, bytes):
         raise ValueError(f"Not a binary type: {value} {type(value)}")
-
-    if isinstance(value, memoryview):
-        value = bytes(value)
 
     for enc in encodings:
         try:
@@ -53,7 +57,7 @@ def decoder(value, encodings=('utf-8',)):
         except UnicodeDecodeError:
             pass
 
-    raise ValueError(f"Unable to decode binary value with any of {encodings}: {value!r}")
+    raise UnicodeDecodeError("unable to decode `{value}`")
 
 
 class DatabaseWrapper(BaseDatabaseWrapper):
@@ -270,8 +274,12 @@ class DatabaseWrapper(BaseDatabaseWrapper):
         # truncate values greater than the limit.
         self.connection.maxwrite = 32000
 
-        self.connection.add_output_converter(-101, lambda r: r.decode('utf-8') if isinstance(r, (bytes, bytearray)) else r)  # Constraints
-        self.connection.add_output_converter(-391, lambda r: r.decode('utf-16-be') if isinstance(r, (bytes, bytearray)) else r)  # Integrity Error
+        if IS_DJANGO_GTE_6:
+            self.connection.add_output_converter(-101, lambda r: r.decode('utf-8') if isinstance(r, (bytes, bytearray)) else r)  # Constraints
+            self.connection.add_output_converter(-391, lambda r: r.decode('utf-16-be') if isinstance(r, (bytes, bytearray)) else r)  # Integrity Error
+        else:
+            self.connection.add_output_converter(-101, lambda r: r.decode('utf-8'))  # Constraints
+            self.connection.add_output_converter(-391, lambda r: r.decode('utf-16-be'))  # Integrity Error
 
         self.connection.add_output_converter(pyodbc.SQL_CHAR, self._output_converter)
         self.connection.add_output_converter(pyodbc.SQL_WCHAR, self._output_converter)
@@ -329,12 +337,14 @@ class DatabaseWrapper(BaseDatabaseWrapper):
 
         @todo: See if this applies to other escape characters
         """
-        if isinstance(raw, (bytes, bytearray)):
-            return raw.replace(b'\\n', b'\n')
-        return raw.replace('\\n', '\n')
+        if IS_DJANGO_GTE_6:
+            if isinstance(raw, (bytes, bytearray)):
+                return raw.replace(b'\\n', b'\n')
+            return raw.replace('\\n', '\n')
+        return raw.replace(b'\\n', b'\n')
 
     def _output_converter(self, raw):
-        if isinstance(raw, str):
+        if IS_DJANGO_GTE_6 and isinstance(raw, str):
             return raw
         return decoder(self._unescape(raw), self.encodings)
 
