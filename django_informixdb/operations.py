@@ -2,7 +2,6 @@ import datetime
 import decimal
 import uuid
 
-
 from django.db.backends.base.operations import BaseDatabaseOperations
 from django.db.models import Aggregate
 from django.db.backends import utils as backend_utils
