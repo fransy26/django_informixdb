@@ -38,8 +38,14 @@ logger = logging.getLogger(__name__)
 def decoder(value, encodings=('utf-8',)):
     """This decoder tries multiple encodings before giving up"""
 
-    if not isinstance(value, bytes):
+    if isinstance(value, str):
+        return value
+
+    if not isinstance(value, (bytes, bytearray, memoryview)):
         raise ValueError(f"Not a binary type: {value} {type(value)}")
+
+    if isinstance(value, memoryview):
+        value = bytes(value)
 
     for enc in encodings:
         try:
@@ -47,7 +53,7 @@ def decoder(value, encodings=('utf-8',)):
         except UnicodeDecodeError:
             pass
 
-    raise UnicodeDecodeError("unable to decode `{value}`")
+    raise ValueError(f"Unable to decode binary value with any of {encodings}: {value!r}")
 
 
 class DatabaseWrapper(BaseDatabaseWrapper):
@@ -264,8 +270,8 @@ class DatabaseWrapper(BaseDatabaseWrapper):
         # truncate values greater than the limit.
         self.connection.maxwrite = 32000
 
-        self.connection.add_output_converter(-101, lambda r: r.decode('utf-8'))  # Constraints
-        self.connection.add_output_converter(-391, lambda r: r.decode('utf-16-be'))  # Integrity Error
+        self.connection.add_output_converter(-101, lambda r: r.decode('utf-8') if isinstance(r, (bytes, bytearray)) else r)  # Constraints
+        self.connection.add_output_converter(-391, lambda r: r.decode('utf-16-be') if isinstance(r, (bytes, bytearray)) else r)  # Integrity Error
 
         self.connection.add_output_converter(pyodbc.SQL_CHAR, self._output_converter)
         self.connection.add_output_converter(pyodbc.SQL_WCHAR, self._output_converter)
@@ -323,9 +329,13 @@ class DatabaseWrapper(BaseDatabaseWrapper):
 
         @todo: See if this applies to other escape characters
         """
-        return raw.replace(b'\\n', b'\n')
+        if isinstance(raw, (bytes, bytearray)):
+            return raw.replace(b'\\n', b'\n')
+        return raw.replace('\\n', '\n')
 
     def _output_converter(self, raw):
+        if isinstance(raw, str):
+            return raw
         return decoder(self._unescape(raw), self.encodings)
 
     def init_connection_state(self):
